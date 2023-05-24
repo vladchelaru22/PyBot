@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from nextcord.ext import commands, tasks
+from nextcord.ext import commands
 import aiohttp  # for gpt
 import asyncio  # for music
 import pyjokes
@@ -51,90 +51,46 @@ ffmpeg_options = {
 }
 ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
 
-async def quote_of_the_day():
-    target_time = time(hour=18, minute=21, second=0)
-    response = requests.get("https://zenquotes.io/api/random")
-    json_data = json.loads(response.text)
-    quote = json_data[0]['q'] + " -" + json_data[0]['a']
-    while True:
-        now = datetime.now().time()
-        if now >= target_time:
-            channel = bot.get_channel(CHANNEL)
-            await channel.send(quote)
-            await asyncio.sleep(86400)
-        else:
-            await asyncio.sleep(1)
+@bot.event
+async def on_ready():
+    print(f'PyBot is up and running!')
+    channel = bot.get_channel(CHANNEL)
+    await channel.send("Hello! PyBot is ready")
+    bot.loop.create_task(quote_of_the_day())
 
-class YTDLSource(nextcord.PCMVolumeTransformer):
-    def __init__(self, source, *, data, volume=0.5):
-        super().__init__(source, volume)
-        self.data = data
-        self.title = data.get('title')
-        self.url = ""
-
-    @classmethod
-    async def from_url(cls, url, *, loop=None, stream=False):
-        loop = loop or asyncio.get_event_loop()
-        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
-        if 'entries' in data:
-            # take first item from a playlist
-            data = data['entries'][0]
-        filename = data['title'] if stream else ytdl.prepare_filename(data)
-        return filename
+@bot.event
+async def on_member_join(member):
+    channel = bot.get_channel(CHANNEL)
+    await channel.send(f"{member.mention} has joined the server")
 
 
-@bot.command(name='play', help='+youtube URL to play anything')
-async def play(ctx, url):
-    server = ctx.message.guild
-    voice_channel = server.voice_client
-    async with ctx.typing():
-        filename = await YTDLSource.from_url(url, loop=bot.loop)
-        voice_channel.play(nextcord.FFmpegPCMAudio(executable="C:\\Users\\vladc\\Desktop\\PyBot\\ffmpeg\\bin\\ffmpeg.exe",
-                                                  source=filename))
-    await ctx.send('**Now playing:** {}'.format(filename))
-
-@bot.command(name='join', help='Tells the bot to join the voice channel')
-async def join(ctx):
-    if not ctx.message.author.voice:
-        await ctx.send("{} is not connected to a voice channel".format(ctx.message.author.name))
-        return
-    else:
-        channel = ctx.message.author.voice.channel
-    await channel.connect()
-
-@bot.command(name='pause', help='This command pauses the audio')
-async def pause(ctx):
-    voice_client = ctx.message.guild.voice_client
-    if voice_client.is_playing():
-        await voice_client.pause()
-    else:
-        await ctx.send("The bot is not playing anything at the moment.")
-
-@bot.command(name='resume', help='Resumes the audio')
-async def resume(ctx):
-    voice_client = ctx.message.guild.voice_client
-    if voice_client.is_paused():
-        await voice_client.resume()
-    else:
-        await ctx.send("The bot was not playing anything before this. Use play command")
+@bot.event
+async def on_member_remove(member):
+    channel = bot.get_channel(CHANNEL)
+    await channel.send(f"{member.mention} has left the server")
 
 
-@bot.command(name='leave', help='Make the bot leave the voice channel')
-async def leave(ctx):
-    voice_client = ctx.message.guild.voice_client
-    if voice_client.is_connected():
-        await voice_client.disconnect()
-    else:
-        await ctx.send("The bot is not connected to a voice channel.")
+@bot.command(name='sum',help='Adds numbers')
+async def add(context, *arr):
+    sum = 0
+    for i in arr:
+        sum += i
+    await context.send(f"Sum: {sum}")
 
+@bot.command(name='product',help='Solves the product of numbers')
+async def product(context, *arr):
+    product = 1
+    for i in arr:
+        product *= i
+    await context.send(f"Product: {product}")
 
-@bot.command(name='stop', help='Stops the audio')
-async def stop(ctx):
-    voice_client = ctx.message.guild.voice_client
-    if voice_client.is_playing():
-        await voice_client.stop()
-    else:
-        await ctx.send("The bot is not playing anything at the moment.")
+@bot.command(name='divide',help='Solves the division of numbers')
+async def divide(context, *arr):
+    divide = arr[0]
+    for i in arr[1:]:
+        divide /= i
+    await context.send(f"Division: {divide}")
+
 
 @bot.command(name='picture',help='Searches the web for what you ask it to')
 async def picture(context,*,search):
@@ -161,11 +117,12 @@ async def weather(context, city_name):
         await context.reply("Invalid city name. Try again!")
 
     else:
-        await context.reply(f'''Temperature in Celsius in {city_name} is : {int(info['temp'] - 273)}
-                        How the temperature actually feels like : {int(info['feels_like'] - 273)}
-                        Short description of the weather : {res['weather'][0]['description']}
-                        Pressure : {info['pressure']}\nHumidity : {info['humidity']}
-                        ''')
+        await context.reply(
+            f'''Temperature in Celsius in {city_name} is : {int(info['temp'] - 273)}
+How the temperature actually feels like : {int(info['feels_like'] - 273)}
+Short description of the weather : {res['weather'][0]['description']}
+Pressure : {info['pressure']}\nHumidity : {info['humidity']}%
+            ''')
 
 @bot.command(name='tts',help='Add a message and the bot will read it out loud')
 async def tts(context, *args):
@@ -212,8 +169,6 @@ def globally_block_commands(ctx):
             return True  # Allow the unmute command even when the guild is muted
         return False  # Block all other commands when the guild is muted
     return True
-
-
 bot.muted_guilds = set()  # Set to store muted guild IDs
 
 
@@ -224,24 +179,26 @@ async def quote(context):
     quote = json_data[0]['q'] + " -" + json_data[0]['a']
     await context.send(quote)
 
-@bot.event
-async def on_member_join(member):
-    channel = bot.get_channel(CHANNEL)
-    await channel.send(f"{member.mention} has joined the server")
-
-
-@bot.event
-async def on_member_remove(member):
-    channel = bot.get_channel(CHANNEL)
-    await channel.send(f"{member.mention} has left the server")
-
+async def quote_of_the_day():
+    target_time = time(hour=18, minute=21, second=0)
+    response = requests.get("https://zenquotes.io/api/random")
+    json_data = json.loads(response.text)
+    quote = json_data[0]['q'] + " -" + json_data[0]['a']
+    while True:
+        now = datetime.now().time()
+        if now >= target_time:
+            channel = bot.get_channel(CHANNEL)
+            await channel.send(quote)
+            await asyncio.sleep(86400)
+        else:
+            await asyncio.sleep(1)
 
 @bot.command(name='joke',help='Delivers a "funny" joke')
 async def joke(context):
     await context.send(pyjokes.get_joke())
 
 
-@bot.command(name='remind',help='Add a reminder. First include the time in minutes and then the message you want to be reminded about')
+@bot.command(name='remind',help='Add a reminder. Include the time in minutes + the reminder')
 async def remind(context, time: int, *, msg):
     channel = bot.get_channel(CHANNEL)
 
@@ -274,33 +231,76 @@ async def gpt(context: commands.Context, *, prompt: str):
             await context.reply(embed=embed)
 
 
-@bot.event
-async def on_ready():
-    print(f'PyBot is up and running!')
-    channel = bot.get_channel(CHANNEL)
-    await channel.send("Hello! Project Bot is ready")
-    bot.loop.create_task(quote_of_the_day())
+class YTDLSource(nextcord.PCMVolumeTransformer):
+    def __init__(self, source, *, data, volume=0.5):
+        super().__init__(source, volume)
+        self.data = data
+        self.title = data.get('title')
+        self.url = ""
 
-@bot.command(name='sum',help='Adds numbers')
-async def add(context, *arr):
-    sum = 0
-    for i in arr:
-        sum += i
-    await context.send(f"Sum: {sum}")
+    @classmethod
+    async def from_url(cls, url, *, loop=None, stream=False):
+        loop = loop or asyncio.get_event_loop()
+        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
+        if 'entries' in data:
+            # take first item from a playlist
+            data = data['entries'][0]
+        filename = data['title'] if stream else ytdl.prepare_filename(data)
+        return filename
 
-@bot.command(name='product',help='Solves the product of numbers')
-async def product(context, *arr):
-    product = 1
-    for i in arr:
-        product *= i
-    await context.send(f"Product: {product}")
+@bot.command(name='join', help='Tells the bot to join the voice channel')
+async def join(ctx):
+    if not ctx.message.author.voice:
+        await ctx.send("{} is not connected to a voice channel".format(ctx.message.author.name))
+        return
+    else:
+        channel = ctx.message.author.voice.channel
+    await channel.connect()
+    
+@bot.command(name='leave', help='Make the bot leave the voice channel')
+async def leave(ctx):
+    voice_client = ctx.message.guild.voice_client
+    if voice_client.is_connected():
+        await voice_client.disconnect()
+    else:
+        await ctx.send("The bot is not connected to a voice channel.")
+    
+@bot.command(name='play', help='+youtube URL to play anything')
+async def play(ctx, url):
+    server = ctx.message.guild
+    voice_channel = server.voice_client
+    async with ctx.typing():
+        filename = await YTDLSource.from_url(url, loop=bot.loop)
+        voice_channel.play(nextcord.FFmpegPCMAudio(executable="C:\\Users\\vladc\\Desktop\\PyBot\\ffmpeg\\bin\\ffmpeg.exe",
+                                                  source=filename))
+    await ctx.send('**Now playing:** {}'.format(filename))
 
-@bot.command(name='divide',help='Solves the product of numbers')
-async def divide(context, *arr):
-    divide = 1
-    for i in arr:
-        divide *= i
-    await context.send(f"Division: {divide}")
+
+@bot.command(name='pause', help='This command pauses the audio')
+async def pause(ctx):
+    voice_client = ctx.message.guild.voice_client
+    if voice_client.is_playing():
+        await voice_client.pause()
+    else:
+        await ctx.send("The bot is not playing anything at the moment.")
+
+@bot.command(name='resume', help='Resumes the audio')
+async def resume(ctx):
+    voice_client = ctx.message.guild.voice_client
+    if voice_client.is_paused():
+        await voice_client.resume()
+    else:
+        await ctx.send("The bot was not playing anything before this. Use play command")
+
+
+@bot.command(name='stop', help='Stops the audio')
+async def stop(ctx):
+    voice_client = ctx.message.guild.voice_client
+    if voice_client.is_playing():
+        await voice_client.stop()
+    else:
+        await ctx.send("The bot is not playing anything at the moment.")
+
 
 bot.run(TOKEN)
 print(client.guilds)
