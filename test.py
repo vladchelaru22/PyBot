@@ -74,21 +74,21 @@ async def on_member_remove(member):
 async def add(context, *arr):
     sum = 0
     for i in arr:
-        sum += i
+        sum += int(i)
     await context.send(f"Sum: {sum}")
 
 @bot.command(name='product',help='Solves the product of numbers')
 async def product(context, *arr):
     product = 1
     for i in arr:
-        product *= i
+        product *= int(i)
     await context.send(f"Product: {product}")
 
 @bot.command(name='divide',help='Solves the division of numbers')
 async def divide(context, *arr):
-    divide = arr[0]
+    divide = int(arr[0])
     for i in arr[1:]:
-        divide /= i
+        divide /= float(i)
     await context.send(f"Division: {divide}")
 
 
